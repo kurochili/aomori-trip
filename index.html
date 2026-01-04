@@ -9,7 +9,6 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/panzoom@9.4.3/dist/panzoom.min.js"></script>
     <style>
         /* 隐藏滚动条但保留功能，提升手机端体验 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -23,10 +22,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
-
-        // 远端清单同步 API（MockAPI）
-        const CHECKLIST_API = 'https://695a0c9f950475ada465ad75.mockapi.io/checklist';
+        const { useState } = React;
 
         // --- 1. 图标组件库 (Icon System) ---
         const Icons = {
@@ -43,6 +39,8 @@
             ArrowUpRight: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" /></svg>,
             Info: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
             Soup: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+            Coffee: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8h13a4 4 0 010 8H3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 12h1a3 3 0 110 6H4a2 2 0 01-2-2V8" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 4h.01M12 4h.01M16 4h.01" /></svg>,
+            Music: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>,
             Camera: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
             Car: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>,
             ShoppingBag: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>,
@@ -112,9 +110,10 @@
             );
         };
 
-        const ChecklistItem = ({ text, crucial = false, storageKey, checked, onToggle }) => {
+        const ChecklistItem = ({ text, crucial = false }) => {
+            const [checked, setChecked] = useState(false);
             return (
-                <div onClick={() => onToggle && onToggle(storageKey, !checked)} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all mb-2 ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                <div onClick={() => setChecked(!checked)} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all mb-2 ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                     <div className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 transition-colors ${checked ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300'}`}>
                         {checked && <Icons.CheckSquare className="w-3.5 h-3.5 text-white" />}
                     </div>
@@ -149,70 +148,9 @@
             const [activeView, setActiveView] = useState('timeline');
             const [jrStatusDay1, setJrStatusDay1] = useState('Normal'); 
             const [busStatusDay2, setBusStatusDay2] = useState('Normal');
-            const [checkRecords, setCheckRecords] = useState({}); // key -> { id, checked }
-            const [loadingChecklist, setLoadingChecklist] = useState(false);
             
             // 只有 Day 3 和 Day 4 显示雪场地图选项
             const showSkiTab = activeDay === 3 || activeDay === 4;
-
-            useEffect(() => {
-                const panEl = document.getElementById('ski-map-pan');
-                if (panEl && window.panzoom) {
-                    window.panzoom(panEl, {
-                        maxZoom: 4,
-                        minZoom: 1,
-                        bounds: true,
-                        boundsPadding: 0.1
-                    });
-                }
-            }, []);
-
-            // 远端勾选状态加载
-            useEffect(() => {
-                const loadChecklist = async () => {
-                    setLoadingChecklist(true);
-                    try {
-                        const res = await fetch(CHECKLIST_API);
-                        if (!res.ok) throw new Error('load failed');
-                        const data = await res.json();
-                        const map = {};
-                        data.forEach(item => { if (item.key) map[item.key] = { id: item.id, checked: !!item.checked }; });
-                        setCheckRecords(map);
-                    } catch (err) {
-                        console.warn('清单同步失败', err);
-                    } finally {
-                        setLoadingChecklist(false);
-                    }
-                };
-                loadChecklist();
-            }, []);
-
-            const upsertChecklist = async (key, nextChecked) => {
-                const current = checkRecords[key];
-                const body = JSON.stringify({ key, checked: nextChecked });
-                const headers = { 'Content-Type': 'application/json' };
-                try {
-                    if (current && current.id) {
-                        await fetch(`${CHECKLIST_API}/${current.id}`, { method: 'PUT', headers, body });
-                    } else {
-                        const res = await fetch(CHECKLIST_API, { method: 'POST', headers, body });
-                        if (res.ok) {
-                            const created = await res.json();
-                            setCheckRecords(prev => ({ ...prev, [key]: { id: created.id, checked: nextChecked } }));
-                            return;
-                        }
-                    }
-                    // 更新本地状态
-                    setCheckRecords(prev => ({ ...prev, [key]: { id: current?.id, checked: nextChecked } }));
-                } catch (err) {
-                    console.warn('同步失败', err);
-                }
-            };
-
-            const handleToggleCheck = (key, nextChecked) => {
-                setCheckRecords(prev => ({ ...prev, [key]: { id: prev[key]?.id, checked: nextChecked } }));
-                upsertChecklist(key, nextChecked);
-            };
 
             return (
                 <div className="max-w-md mx-auto bg-slate-50 min-h-screen font-sans border-x border-slate-200 shadow-2xl flex flex-col">
@@ -247,39 +185,60 @@
                             <div className="animate-fade-in">
                                 {activeView === 'timeline' && (
                                     <>
-                                        <h3 className="text-xs font-extrabold text-orange-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Flame className="w-4 h-4" /> Day 1: 暖炉列车</h3>
-                                        <TimelineItem time="11:00" title="弘前站寄存行李" desc="⚠️ 存在1楼。全天轻装，晚上回站取。" icon={Icons.Luggage} type="luggage" />
+                                        <h3 className="text-xs font-extrabold text-orange-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Flame className="w-4 h-4" /> Day 1: 暖炉列车 · 出发全流程</h3>
                                         
+                                        <HighlightCard
+                                            title="出发前必读 · 5 大生死线"
+                                            time="务必截图"
+                                            icon={Icons.AlertTriangle}
+                                            description="1) 12:10/12:40 生死车次；2) 抵达后先买暖炉票；3) 随身≥15,000日元现金；4) 行李寄存弘前站1楼，绝不带去五所川原；5) 暴雪 JR 停运立即切 Plan B。"
+                                            colorClass="bg-amber-50 border-amber-200 text-amber-900"
+                                            badge="关键"
+                                            subtext="JR 五能线易停运，12:00 前确认运行状况。"
+                                        />
+
+                                        <TimelineItem time="07:15-08:35" title="羽田 → 青森" desc="JAL 141 早班机，提前1小时到 T1。" icon={Icons.Train} type="transport" />
+                                        <TimelineItem time="09:55-10:50" title="青森机场 → 弘前站" desc="空港巴士 1,200 日元（现金）。" icon={Icons.Bus} type="transport" />
+                                        <TimelineItem time="10:50" title="弘前站寄存行李" desc="1 楼寄存柜，12:30 前务必存好，全程轻装。" icon={Icons.Luggage} type="luggage" />
+                                        <TimelineItem time="11:00-12:00" title="午餐：弘前站周边" desc="BRICK A-FACTORY，苹果酒/苹果派；或就近速食。" icon={Icons.Utensils} />
+
                                         <div className="bg-white rounded-xl border border-slate-200 p-2 mb-6 shadow-sm">
-                                            <div className="text-[10px] text-center text-slate-400 font-bold uppercase mb-1">12:00 JR 状况</div>
+                                            <div className="text-[10px] text-center text-slate-400 font-bold uppercase mb-1">12:00 JR 状况 · 选择方案</div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <button onClick={() => setJrStatusDay1('Normal')} className={`py-2 rounded text-xs font-bold ${jrStatusDay1 === 'Normal' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>JR 正常</button>
-                                                <button onClick={() => setJrStatusDay1('Suspended')} className={`py-2 rounded text-xs font-bold ${jrStatusDay1 === 'Suspended' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-500'}`}>JR 停运</button>
+                                                <button onClick={() => setJrStatusDay1('Normal')} className={`py-2 rounded text-xs font-bold ${jrStatusDay1 === 'Normal' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>JR 正常（Plan A）</button>
+                                                <button onClick={() => setJrStatusDay1('Suspended')} className={`py-2 rounded text-xs font-bold ${jrStatusDay1 === 'Suspended' ? 'bg-slate-500 text-white' : 'bg-slate-100 text-slate-500'}`}>JR 停运（Plan B）</button>
                                             </div>
                                         </div>
 
                                         {jrStatusDay1 === 'Normal' ? (
                                             <>
-                                                <TimelineItem time="12:10" title="Resort 白神号" desc="前往五所川原 (需预约)。" icon={Icons.Train} type="transport" />
-                                                <TimelineItem time="13:00" title="🔥 先买暖炉票" desc="下车第一件事：买津轻铁道票(现金)。" icon={Icons.Ticket} type="warning" />
-                                                <TimelineItem time="13:10" title="立佞武多之馆" desc="30分钟速览巨型灯笼。" icon={Icons.MapPin} />
-                                                <HighlightCard title="暖炉列车" time="14:10" icon={Icons.Flame} description="烤鱿鱼，喝清酒，看雪景。" colorClass="bg-orange-50 border-orange-200 text-orange-900" badge="备现金" />
+                                                <TimelineItem time="12:10-12:54" title="弘前 → 五所川原" desc="Resort 白神号（需预约）。" icon={Icons.Train} type="transport" />
+                                                <TimelineItem time="12:54-13:05" title="黄金空档：先买暖炉票" desc="下 JR 左转到津轻铁道窗口，现金买票再去玩。" icon={Icons.Ticket} type="warning" />
+                                                <TimelineItem time="13:10-13:50" title="立佞武多之馆" desc="步行 5 分钟，30-40 分钟速览巨型灯笼。" icon={Icons.MapPin} />
+                                                <TimelineItem time="13:55-14:05" title="回站排队" desc="拿着票直接排队，抢炉边座位。" icon={Icons.List} />
+                                                <HighlightCard title="暖炉列车体验" time="14:10-14:55" icon={Icons.Flame} description="津轻铁道，车内烤鱿鱼/清酒，核心体验。" colorClass="bg-orange-50 border-orange-200 text-orange-900" badge="现金" />
+                                                <TimelineItem time="15:20-15:55" title="金木 → 五所川原" desc="普通列车返回五所川原。" icon={Icons.Train} type="transport" />
+                                                <TimelineItem time="16:46-17:35" title="五所川原 → 弘前" desc="JR 五能线回弘前。" icon={Icons.Train} type="transport" />
                                             </>
                                         ) : (
-                                            <TimelineItem time="12:50" title="Plan B" desc="JR停运，改坐巴士或游览弘前市区。" icon={Icons.Info} />
+                                            <>
+                                                <TimelineItem time="12:50" title="Plan B 占位" desc="JR 停运则改乘巴士/弘前市区行程（可补充具体线路）。" icon={Icons.Info} />
+                                            </>
                                         )}
 
-                                        <HighlightCard title="大鳄日归温泉" time="18:15" icon={Icons.Soup} description="晚餐：豆芽拉面。 温泉：露天雪见风吕。" colorClass="bg-indigo-50 border-indigo-200 text-indigo-900" badge="Lo. 19:00" />
-                                        <TimelineItem time="20:45" title="取行李 & 入住" desc="取回早上的行李，入住东横INN。" icon={Icons.Hotel} type="luggage" />
+                                        <HighlightCard title="大鳄日归温泉 + 晚餐" time="17:55-21:00" icon={Icons.Soup} description="17:55 弘前→大鳄（JR 奥羽本线 12 分钟）；18:10-18:15 步行；18:15-19:00 豆芽拉面；19:00-20:00 温泉；20:12-20:24 回弘前。" colorClass="bg-indigo-50 border-indigo-200 text-indigo-900" />
+                                        <TimelineItem time="20:30-20:40" title="取行李" desc="回弘前站取寄存行李。" icon={Icons.Luggage} type="luggage" />
+                                        <TimelineItem time="20:40-20:55" title="打车至酒店" desc="前往东横INN 弘前站前。" icon={Icons.Car} type="transport" />
+                                        <TimelineItem time="21:00" title="办理入住" desc="Toyoko Inn Hirosaki Ekimae。" icon={Icons.Hotel} />
                                     </>
                                 )}
                                 {activeView === 'hotel' && <HotelCard name="Toyoko Inn Hirosaki Ekimae" type="商务饭店" tags={["免费早餐", "车站1分钟", "高性价比"]} description="标准化日式商务饭店。优点是极其干净、位置绝佳。免费早餐有简单的饭团和味噌汤。" checkInTime="21:00" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem storageKey="d1_resort" text="预约 Resort 白神号 (12:10) 指定席" crucial={true} checked={!!checkRecords['d1_resort']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d1_cash" text="准备 20,000 日元现金 (暖炉/巴士不收卡)" crucial={true} checked={!!checkRecords['d1_cash']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d1_luggage" text="早上行李必须寄存在弘前站 1 楼" crucial={true} checked={!!checkRecords['d1_luggage']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d1_dinner" text="大鳄 Wani Come 晚餐 19:00 关门，先吃再泡" crucial={true} checked={!!checkRecords['d1_dinner']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem text="预约 Resort 白神号 (12:10) 指定席" crucial={true} />
+                                        <ChecklistItem text="准备 20,000 日元现金 (暖炉/巴士不收卡)" crucial={true} />
+                                        <ChecklistItem text="早上行李必须寄存在弘前站 1 楼" crucial={true} />
+                                        <ChecklistItem text="大鳄 Wani Come 晚餐 19:00 关门，先吃再泡" crucial={true} />
                                     </div>
                                 )}
                             </div>
@@ -290,39 +249,63 @@
                             <div className="animate-fade-in">
                                 {activeView === 'timeline' && (
                                     <>
-                                        <h3 className="text-xs font-extrabold text-pink-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Mountain className="w-4 h-4" /> Day 2: 岩木山 & 灯光秀</h3>
-                                        <TimelineItem time="08:50" title="退房 & 存行李" desc="⚠️ 行李继续存弘前站！晚上回站转车。" icon={Icons.Luggage} type="luggage" />
-                                        <TimelineItem time="09:10" title="弘南巴士 (枯木平线)" desc="【生死线】3号月台，准时发车。" icon={Icons.Bus} type="transport" />
-                                        <HighlightCard title="岩木山神社" time="09:50" icon={Icons.Mountain} description="雪中红色鸟居，津轻富士。" colorClass="bg-slate-100 border-slate-200 text-slate-800" />
+                                        <h3 className="text-xs font-extrabold text-pink-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Mountain className="w-4 h-4" /> Day 2: 岩木山 · 冬之樱</h3>
                                         
+                                        <HighlightCard
+                                            title="出发前必读 · 4 大生死线"
+                                            time="务必截图"
+                                            icon={Icons.AlertTriangle}
+                                            description="1) 09:10 去程 & 12:40 回程巴士必须死守；2) 回程务必在市役所前下车；3) 看灯光秀会错过16:00接驳，晚间需自费铁路+打车去酒店；4) 行李早上寄存弘前站，晚间取。"
+                                            colorClass="bg-rose-50 border-rose-200 text-rose-900"
+                                            badge="关键"
+                                        />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-2">阶段1：早安弘前 & 岩木山出发</h4>
+                                        <TimelineItem time="07:00-08:30" title="早餐" desc="酒店内免费早餐，吃饱再出门。" icon={Icons.Utensils} />
+                                        <TimelineItem time="08:30-08:50" title="退房 & 寄存行李" desc="行李寄存弘前站储物柜（晚间回站取）。" icon={Icons.Luggage} type="luggage" />
+                                        <TimelineItem time="09:00-09:10" title="前往3号月台" desc="JR站前弘南巴士枯木平线，确认方向。" icon={Icons.MapPin} />
+                                        <TimelineItem time="09:10-09:49" title="弘前 → 岩木山神社" desc="弘南巴士枯木平线，约720日元，备零钞。" icon={Icons.Bus} type="transport" />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段2：雪中参拜 & 午餐</h4>
+                                        <TimelineItem time="09:50-" title="岩木山神社参拜" desc="雪中红鸟居/津轻富士合影，苹果御守。" icon={Icons.Mountain} />
+
                                         <div className="bg-white rounded-xl border border-slate-200 p-2 mb-6 shadow-sm">
                                             <div className="text-[10px] text-center text-slate-400 font-bold uppercase mb-1">12:40 回程巴士</div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <button onClick={() => setBusStatusDay2('Normal')} className={`py-2 rounded text-xs font-bold ${busStatusDay2 === 'Normal' ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500'}`}>赶上巴士</button>
+                                                <button onClick={() => setBusStatusDay2('Normal')} className={`py-2 rounded text-xs font-bold ${busStatusDay2 === 'Normal' ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500'}`}>准时上车</button>
                                                 <button onClick={() => setBusStatusDay2('Missed')} className={`py-2 rounded text-xs font-bold ${busStatusDay2 === 'Missed' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>错过了</button>
                                             </div>
                                         </div>
 
                                         {busStatusDay2 === 'Normal' ? (
-                                            <TimelineItem time="12:40" title="回程: 市役所前下车" desc="⚠️ 不要坐回弘前站！" icon={Icons.Bus} type="warning" />
+                                            <TimelineItem time="12:40-13:18" title="岩木山神社 → 市役所前" desc="⚠️ 必须在市役所前下车，不回弘前站。" icon={Icons.Bus} type="warning" />
                                         ) : (
-                                            <TimelineItem time="14:40" title="下一班巴士" desc="行程延误，放弃午餐名店，直奔公园。" icon={Icons.AlertTriangle} type="warning" />
+                                            <TimelineItem time="14:40" title="下一班巴士" desc="错过则行程延误，午餐/灯光需压缩。" icon={Icons.AlertTriangle} type="warning" />
                                         )}
 
-                                        <TimelineItem time="13:25" title="Salon de cafe Ange" desc="洋馆苹果咖哩午餐。" icon={Icons.Utensils} />
-                                        <HighlightCard title="冬之樱·灯光秀" time="16:30" icon={Icons.Snowflake} description="弘前公园外濠。粉色灯光照亮积雪樱花。" colorClass="bg-pink-50 border-pink-200 text-pink-900" badge="必看" />
-                                        
-                                        <TimelineItem time="17:50" title="打车回站取行李" desc="取行李后去坐弘南铁道。" icon={Icons.Luggage} type="luggage" />
-                                        <TimelineItem time="18:00" title="弘南铁道 + 打车" desc="前往南田温泉 (错过接驳车方案)。" icon={Icons.Train} type="transport" />
-                                        <HighlightCard title="苹果风吕" time="21:00" icon={Icons.Soup} description="漂浮真实红苹果的温泉。" colorClass="bg-red-50 border-red-200 text-red-900" />
+                                        <TimelineItem time="13:20-13:25" title="步行至餐厅" desc="下车过马路即达藤田纪念庭园。" icon={Icons.MapPin} />
+                                        <TimelineItem time="13:25-" title="午餐：Salon de cafe (藤田庭园洋馆)" desc="必点苹果咖哩/苹果派。" icon={Icons.Utensils} />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段3：弘前散策 & 冬之樱</h4>
+                                        <TimelineItem time="14:30-" title="弘前公园漫步" desc="追手门进，冬季天守/下乘桥红桥。" icon={Icons.Map} />
+                                        <HighlightCard title="冬之樱·灯光秀" time="16:30-" icon={Icons.Snowflake} description="弘前公园外濠，粉色灯光照亮积雪樱花。" colorClass="bg-pink-50 border-pink-200 text-pink-900" badge="必看" />
+                                        <TimelineItem time="17:30" title="回弘前站取行李" desc="打车约1000日元，城东口取寄存行李。" icon={Icons.Luggage} type="luggage" />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段4：苹果温泉之夜</h4>
+                                        <TimelineItem time="18:00-18:13" title="弘前 → 平贺" desc="弘南铁道（弘南线）430日元；备选 18:30 班次。" icon={Icons.Train} type="transport" />
+                                        <TimelineItem time="18:15-18:25" title="平贺站 → 酒店" desc="打车约1000日元（步行雪地不推荐）。" icon={Icons.Car} type="transport" />
+                                        <TimelineItem time="18:30" title="入住：南田温泉 Apple Land" desc="顺利抵达。" icon={Icons.Hotel} />
+                                        <TimelineItem time="19:00" title="晚餐" desc="饭店餐厅，苹果创意料理。" icon={Icons.Utensils} />
+                                        <TimelineItem time="20:00" title="津轻三味线表演" desc="大厅免费演出（约20:10开场）。" icon={Icons.Music} />
+                                        <HighlightCard title="苹果风吕" time="21:00" icon={Icons.Soup} description="大浴场漂浮真苹果，结束完美一天。" colorClass="bg-red-50 border-red-200 text-red-900" />
                                     </>
                                 )}
                                 {activeView === 'hotel' && <HotelCard name="南田温泉 Hotel Apple Land" type="温泉饭店" tags={["苹果风吕", "津轻三味线"]} description="招牌是大浴场漂浮著无数真实红苹果。晚上 20:00 大堂有免费的津轻三味线演奏。" checkInTime="18:30" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem storageKey="d2_bus" text="死守 09:10 去程和 12:40 回程巴士" crucial={true} checked={!!checkRecords['d2_bus']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d2_stop" text="回程巴士务必在「市役所前」下车" crucial={true} checked={!!checkRecords['d2_stop']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d2_fee" text="准备晚上自行前往饭店的交通费 (约 2000 日元)" checked={!!checkRecords['d2_fee']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem text="死守 09:10 去程和 12:40 回程巴士" crucial={true} />
+                                        <ChecklistItem text="回程巴士务必在「市役所前」下车" crucial={true} />
+                                        <ChecklistItem text="准备晚上自行前往饭店的交通费 (约 2000 日元)" />
                                     </div>
                                 )}
                             </div>
@@ -333,41 +316,30 @@
                             <div className="animate-fade-in">
                                 {activeView === 'timeline' && (
                                     <>
-                                        <h3 className="text-xs font-extrabold text-sky-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Snowflake className="w-4 h-4" /> Day 3: 直奔雪山</h3>
-                                        <TimelineItem time="08:30" title="退房" desc="在饭店大堂等待出租车。" icon={Icons.Hotel} />
-                                        <TimelineItem time="09:00" title="出租车直达" desc="Hokusei/Green Taxi (12,500日元)。" icon={Icons.Car} type="warning" />
-                                        <TimelineItem time="10:00" title="抵达 Rockwood Hotel" desc="入住/寄存行李，1F 租赁装备。" icon={Icons.Hotel} />
-                                        <HighlightCard title="全日滑雪" time="11:00" icon={Icons.Snowflake} description="Aomori Spring。从上午就能开始滑。" colorClass="bg-sky-50 border-sky-200 text-sky-900" />
-                                        <TimelineItem time="13:00" title="午餐" desc="Ramen House 拉面或自备。" icon={Icons.Utensils} />
-                                        <TimelineItem time="19:00" title="饭店自助晚餐" desc="津轻美食自助。" icon={Icons.Utensils} />
+                                        <h3 className="text-xs font-extrabold text-sky-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Snowflake className="w-4 h-4" /> Day 3: 直奔雪山 · Aomori Spring</h3>
+                                        <TimelineItem time="08:30" title="退房" desc="大堂等出租车。" icon={Icons.Hotel} />
+                                        <TimelineItem time="09:00" title="出租车直达 Rockwood" desc="Hokusei/Green Taxi 约12,500日元。" icon={Icons.Car} type="warning" />
+                                        <TimelineItem time="10:00" title="抵达 Rockwood Hotel" desc="办理寄存/入住；1F 租赁装备。" icon={Icons.Hotel} />
+                                        <HighlightCard title="全日滑雪" time="11:00-" icon={Icons.Snowflake} description="Aomori Spring 滑雪；优先 Gondola 上山体验长滑。" colorClass="bg-sky-50 border-sky-200 text-sky-900" />
+                                        <TimelineItem time="13:00" title="午餐" desc="Ramen House 拉面或自备简餐。" icon={Icons.Utensils} />
+                                        <TimelineItem time="15:30" title="休整/热饮" desc="雪场内 Mountain Cafe 等补给。" icon={Icons.Coffee} />
+                                        <TimelineItem time="19:00" title="饭店自助晚餐" desc="Rockwood 自助，津轻特色。" icon={Icons.Utensils} />
+                                        <TimelineItem time="21:00" title="温泉/早休息" desc="泡汤放松，准备隔天全天滑。" icon={Icons.Soup} />
                                     </>
                                 )}
                                 {activeView === 'ski' && (
                                     <div className="space-y-4">
-                                        {/* 嵌入雪场地图 (本地文件 + 支持缩放/拖拽) */}
-                                        <div
-                                            id="ski-map-pan"
-                                            className="rounded-xl overflow-hidden shadow-lg border border-slate-200 bg-white"
-                                            style={{ touchAction: 'none' }}
-                                        >
+                                        {/* 嵌入雪场地图 (Official Map Image) */}
+                                        <div className="rounded-xl overflow-hidden shadow-lg border border-slate-200 bg-white">
                                             <img 
-                                                src="./assetsski-map.png" 
+                                                src="https://aomorispringski.com/wp-content/uploads/2023/10/24-25_TrailMap_EN-1024x724.jpg" 
                                                 alt="Aomori Spring Ski Resort Map" 
-                                                className="w-full h-auto object-cover select-none"
-                                                draggable={false}
+                                                className="w-full h-auto object-cover"
                                             />
                                             <div className="p-3 bg-slate-800 text-white text-xs text-center flex justify-center items-center gap-2">
-                                                <Icons.Map className="w-4 h-4"/> 2026 官方雪道图（可缩放）
+                                                <Icons.Map className="w-4 h-4"/> 2024-2025 官方雪道图
                                             </div>
                                         </div>
-                                        <a
-                                            href="./assetsski-map.png"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 text-xs font-semibold text-sky-700 underline"
-                                        >
-                                            打开原图（新标签，原生缩放）
-                                        </a>
 
                                         <div className="bg-sky-50 p-4 rounded-xl border border-sky-200">
                                             <h4 className="font-bold text-sky-800 flex items-center gap-2 mb-2"><Icons.Mountain className="w-4 h-4"/> 关键数据 (PDF提取)</h4>
@@ -401,9 +373,9 @@
                                 {activeView === 'hotel' && <HotelCard name="Rockwood Hotel & Spa" type="滑雪度假村" tags={["Ski-in/out", "露天溫泉", "自助餐"]} description="位于岩木山腰，出门即是雪场。露天温泉可以眺望日本海和津轻平原。" checkInTime="10:00 (先存行李)" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem storageKey="d3_taxi" text="确认出租车已预约 (09:00, 12,500日元)" crucial={true} checked={!!checkRecords['d3_taxi']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d3_food" text="提前准备好午餐/零食 (山上贵)" checked={!!checkRecords['d3_food']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d3_rent" text="确认滑雪租赁尺寸" checked={!!checkRecords['d3_rent']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem text="确认出租车已预约 (09:00, 12,500日元)" crucial={true} />
+                                        <ChecklistItem text="提前准备好午餐/零食 (山上贵)" />
+                                        <ChecklistItem text="确认滑雪租赁尺寸" />
                                     </div>
                                 )}
                             </div>
@@ -414,12 +386,14 @@
                             <div className="animate-fade-in">
                                 {activeView === 'timeline' && (
                                     <>
-                                        <h3 className="text-xs font-extrabold text-sky-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Mountain className="w-4 h-4" /> Day 4: 全天滑雪</h3>
-                                        <HighlightCard title="挑战山顶" time="09:00 - 15:30" icon={Icons.Mountain} description="搭乘 Gondola 直达山顶 (921m)。" colorClass="bg-slate-100 border-slate-200 text-slate-900" />
-                                        <TimelineItem time="15:30" title="退房 & 還裝備" desc="收拾行李，准备下山。" icon={Icons.CheckSquare} type="warning" />
-                                        <TimelineItem time="16:30" title="打車直達市區" desc="Jumbo Taxi 前往 Hotel JAL City (约2万日元)。" icon={Icons.Car} type="warning" />
-                                        <TimelineItem time="18:00" title="抵達飯店" desc="Hotel JAL City Aomori。" icon={Icons.Hotel} />
-                                        <TimelineItem time="18:30" title="晚餐: 帆立小屋" desc="钓扇贝体验 (Lo. 19:30)。" icon={Icons.Utensils} />
+                                        <h3 className="text-xs font-extrabold text-sky-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.Mountain className="w-4 h-4" /> Day 4: 全天滑雪 · 下山转场</h3>
+                                        <HighlightCard title="挑战山顶" time="09:00 - 15:30" icon={Icons.Mountain} description="Gondola 直达山顶 (921m)，自由滑行；注意体力与收队时间。" colorClass="bg-slate-100 border-slate-200 text-slate-900" />
+                                        <TimelineItem time="12:30" title="午餐/补给" desc="雪场餐厅简单补给，留足下午体力。" icon={Icons.Utensils} />
+                                        <TimelineItem time="15:30" title="归还装备 & 退房" desc="收拾行李，准时下山。" icon={Icons.CheckSquare} type="warning" />
+                                        <TimelineItem time="16:30" title="Jumbo Taxi 下山" desc="直达青森市区 Hotel JAL City，约2万日元（需预约）。" icon={Icons.Car} type="warning" />
+                                        <TimelineItem time="18:00" title="抵达 & 办理入住" desc="Hotel JAL City Aomori。" icon={Icons.Hotel} />
+                                        <TimelineItem time="18:30" title="晚餐：帆立小屋" desc="钓扇贝体验，Lo. 19:30，注意时间。" icon={Icons.Utensils} />
+                                        <TimelineItem time="21:00" title="夜间散步/早休息" desc="视体力安排，备足明日返程。" icon={Icons.Bed} />
                                     </>
                                 )}
                                 {activeView === 'ski' && (
@@ -440,9 +414,9 @@
                                 {activeView === 'hotel' && <HotelCard name="Hotel JAL City Aomori" type="市区饭店" tags={["A-Factory旁", "帆立贝早餐"]} description="位置极佳，距离青森站、睡魔之家、A-Factory 都在步行范围内。" checkInTime="18:10" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem storageKey="d4_jumbo" text="预约 16:30 的 Jumbo Taxi 直达青森市区" crucial={true} checked={!!checkRecords['d4_jumbo']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d4_return" text="准时退房并归还租赁装备" checked={!!checkRecords['d4_return']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d4_dinner" text="赶在 19:00 前到达帆立小屋 (防关门)" crucial={true} checked={!!checkRecords['d4_dinner']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem text="预约 16:30 的 Jumbo Taxi 直达青森市区" crucial={true} />
+                                        <ChecklistItem text="准时退房并归还租赁装备" />
+                                        <ChecklistItem text="赶在 19:00 前到达帆立小屋 (防关门)" crucial={true} />
                                     </div>
                                 )}
                             </div>
@@ -453,23 +427,38 @@
                             <div className="animate-fade-in">
                                 {activeView === 'timeline' && (
                                     <>
-                                        <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.ArrowUpRight className="w-4 h-4" /> Day 5: 睡魔 & 返东京</h3>
-                                        <TimelineItem time="09:00" title="广田神社" desc="苹果神社参拜。" icon={Icons.MapPin} />
-                                        <HighlightCard title="睡魔之家 WARASSE" time="10:00" icon={Icons.Camera} description="参观巨型睡魔灯笼，感受祭典震撼。" colorClass="bg-red-50 border-red-200 text-red-900" />
-                                        <TimelineItem time="11:00" title="A-Factory" desc="买苹果伴手礼，吃午餐。" icon={Icons.ShoppingBag} />
-                                        <TimelineItem time="14:30" title="回酒店取行李" desc="准备去新干线站。" icon={Icons.Luggage} type="luggage" />
-                                        <TimelineItem time="15:10" title="JR 前往新青森" desc="前往新干线车站。" icon={Icons.Train} type="transport" />
-                                        <HighlightCard title="新干线 Hayabusa" time="16:00 - 19:30" icon={Icons.Train} description="返回东京。建议在「上野站 (Ueno)」下车。" colorClass="bg-green-50 border-green-200 text-green-900" />
-                                        <TimelineItem time="19:45" title="上野 → 日暮里" desc="JR 山手线 (2站)。入住 Hotel Mystays。" icon={Icons.Hotel} type="highlight" />
-                                        <HighlightCard title="面屋武藏 (晚餐)" time="20:30" icon={Icons.Soup} description="推荐：面屋武藏 武骨 (上野) 或 巖虎 (秋叶原)。" colorClass="bg-slate-800 text-white border-slate-700" badge="必吃沾面" />
+                                        <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Icons.ArrowUpRight className="w-4 h-4" /> Day 5: 睡魔 · 淺蟲 · 返东京</h3>
+                                        
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-2">阶段1：青森文化巡礼</h4>
+                                        <TimelineItem time="08:30" title="退房 & 寄存行李" desc="JAL City 前台寄存，返程路上取。" icon={Icons.Luggage} type="luggage" />
+                                        <TimelineItem time="09:00-09:40" title="广田神社（苹果神社）" desc="步行/计程车，雪中绘马与苹果造型。" icon={Icons.MapPin} />
+                                        <HighlightCard title="睡魔之家 WARASSE" time="10:00-11:00" icon={Icons.Camera} description="巨型睡魔灯笼，门票约620日元。" colorClass="bg-red-50 border-red-200 text-red-900" />
+                                        <TimelineItem time="11:00-12:00" title="A-Factory" desc="伴手礼/苹果酒/简餐，睡魔之家隔壁。" icon={Icons.ShoppingBag} />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段2：浅虫温泉看海</h4>
+                                        <TimelineItem time="12:20-12:43" title="青森 → 浅虫温泉" desc="青之森铁路 460 日元，陆奥湾雪景。" icon={Icons.Train} type="transport" />
+                                        <TimelineItem time="12:50-13:50" title="浅虫温泉观光" desc="Yu~sa 展望台/海边散步/湯之島/鶴龜屋食堂。" icon={Icons.Map} />
+                                        <TimelineItem time="14:00-14:24" title="浅虫温泉 → 青森" desc="青之森铁路返市区。" icon={Icons.Train} type="transport" />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段3：新干线返程</h4>
+                                        <TimelineItem time="14:30-15:00" title="取行李" desc="回 JAL City 取寄存。" icon={Icons.Luggage} type="luggage" />
+                                        <TimelineItem time="15:10-15:16" title="青森 → 新青森" desc="JR 奥羽本线，预留缓冲。" icon={Icons.Train} type="transport" />
+                                        <TimelineItem time="15:30-16:00" title="旬味馆补货" desc="新青森站便当/苹果特产。" icon={Icons.ShoppingBag} />
+                                        <HighlightCard title="新干线 Hayabusa" time="16:00-19:30" icon={Icons.Train} description="返回东京，建议买到上野站下车。" colorClass="bg-green-50 border-green-200 text-green-900" />
+
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase mt-4 mb-2">阶段4：东京之夜</h4>
+                                        <TimelineItem time="19:30-19:45" title="抵达上野站" desc="换乘 JR 山手/京滨东北线。" icon={Icons.MapPin} />
+                                        <TimelineItem time="19:50-20:00" title="上野 → 日暮里" desc="JR 2 站，约 4 分钟。" icon={Icons.Train} type="transport" />
+                                        <TimelineItem time="20:10" title="入住 Hotel Mystays" desc="放行李，轻装出门。" icon={Icons.Hotel} />
+                                        <HighlightCard title="面屋武藏 (晚餐)" time="20:30-21:30" icon={Icons.Soup} description="武骨(上野)或秋叶原巖虎，注意 22:00 关门。" colorClass="bg-slate-800 text-white border-slate-700" badge="必吃沾面" />
                                     </>
                                 )}
                                 {activeView === 'hotel' && <HotelCard name="Hotel Mystays Nippori" type="东京据点" tags={["交通枢纽", "成田便利", "安静"]} description="位于日暮里，是往返成田机场的 Skyliner 枢纽站。周边有著名的'谷中银座'老街。" checkInTime="20:00 (到达东京后)" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem storageKey="d5_buffer" text="预留 45 分钟以上前往新青森站 (防JR误点)" crucial={true} checked={!!checkRecords['d5_buffer']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d5_ueno" text="新干线票买到「上野站」更方便" crucial={true} checked={!!checkRecords['d5_ueno']?.checked} onToggle={handleToggleCheck} />
-                                        <ChecklistItem storageKey="d5_noodle" text="面屋武藏 22:00 关门，请尽早前往" crucial={true} checked={!!checkRecords['d5_noodle']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem text="预留 45 分钟以上前往新青森站 (防JR误点)" crucial={true} />
+                                        <ChecklistItem text="新干线票买到「上野站」更方便" crucial={true} />
+                                        <ChecklistItem text="面屋武藏 22:00 关门，请尽早前往" crucial={true} />
                                     </div>
                                 )}
                             </div>
