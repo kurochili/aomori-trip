@@ -25,6 +25,9 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        // 远端清单同步 API（MockAPI）
+        const CHECKLIST_API = 'https://695a0c9f950475ada465ad75.mockapi.io/api/v1/checklist';
+
         // --- 1. 图标组件库 (Icon System) ---
         const Icons = {
             Snowflake: (props) => <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
@@ -109,10 +112,9 @@
             );
         };
 
-        const ChecklistItem = ({ text, crucial = false }) => {
-            const [checked, setChecked] = useState(false);
+        const ChecklistItem = ({ text, crucial = false, storageKey, checked, onToggle }) => {
             return (
-                <div onClick={() => setChecked(!checked)} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all mb-2 ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                <div onClick={() => onToggle && onToggle(storageKey, !checked)} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all mb-2 ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                     <div className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 transition-colors ${checked ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300'}`}>
                         {checked && <Icons.CheckSquare className="w-3.5 h-3.5 text-white" />}
                     </div>
@@ -147,6 +149,8 @@
             const [activeView, setActiveView] = useState('timeline');
             const [jrStatusDay1, setJrStatusDay1] = useState('Normal'); 
             const [busStatusDay2, setBusStatusDay2] = useState('Normal');
+            const [checkRecords, setCheckRecords] = useState({}); // key -> { id, checked }
+            const [loadingChecklist, setLoadingChecklist] = useState(false);
             
             // 只有 Day 3 和 Day 4 显示雪场地图选项
             const showSkiTab = activeDay === 3 || activeDay === 4;
@@ -162,6 +166,53 @@
                     });
                 }
             }, []);
+
+            // 远端勾选状态加载
+            useEffect(() => {
+                const loadChecklist = async () => {
+                    setLoadingChecklist(true);
+                    try {
+                        const res = await fetch(CHECKLIST_API);
+                        if (!res.ok) throw new Error('load failed');
+                        const data = await res.json();
+                        const map = {};
+                        data.forEach(item => { if (item.key) map[item.key] = { id: item.id, checked: !!item.checked }; });
+                        setCheckRecords(map);
+                    } catch (err) {
+                        console.warn('清单同步失败', err);
+                    } finally {
+                        setLoadingChecklist(false);
+                    }
+                };
+                loadChecklist();
+            }, []);
+
+            const upsertChecklist = async (key, nextChecked) => {
+                const current = checkRecords[key];
+                const body = JSON.stringify({ key, checked: nextChecked });
+                const headers = { 'Content-Type': 'application/json' };
+                try {
+                    if (current && current.id) {
+                        await fetch(`${CHECKLIST_API}/${current.id}`, { method: 'PUT', headers, body });
+                    } else {
+                        const res = await fetch(CHECKLIST_API, { method: 'POST', headers, body });
+                        if (res.ok) {
+                            const created = await res.json();
+                            setCheckRecords(prev => ({ ...prev, [key]: { id: created.id, checked: nextChecked } }));
+                            return;
+                        }
+                    }
+                    // 更新本地状态
+                    setCheckRecords(prev => ({ ...prev, [key]: { id: current?.id, checked: nextChecked } }));
+                } catch (err) {
+                    console.warn('同步失败', err);
+                }
+            };
+
+            const handleToggleCheck = (key, nextChecked) => {
+                setCheckRecords(prev => ({ ...prev, [key]: { id: prev[key]?.id, checked: nextChecked } }));
+                upsertChecklist(key, nextChecked);
+            };
 
             return (
                 <div className="max-w-md mx-auto bg-slate-50 min-h-screen font-sans border-x border-slate-200 shadow-2xl flex flex-col">
@@ -225,10 +276,10 @@
                                 {activeView === 'hotel' && <HotelCard name="Toyoko Inn Hirosaki Ekimae" type="商务饭店" tags={["免费早餐", "车站1分钟", "高性价比"]} description="标准化日式商务饭店。优点是极其干净、位置绝佳。免费早餐有简单的饭团和味噌汤。" checkInTime="21:00" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem text="预约 Resort 白神号 (12:10) 指定席" crucial={true} />
-                                        <ChecklistItem text="准备 20,000 日元现金 (暖炉/巴士不收卡)" crucial={true} />
-                                        <ChecklistItem text="早上行李必须寄存在弘前站 1 楼" crucial={true} />
-                                        <ChecklistItem text="大鳄 Wani Come 晚餐 19:00 关门，先吃再泡" crucial={true} />
+                                        <ChecklistItem storageKey="d1_resort" text="预约 Resort 白神号 (12:10) 指定席" crucial={true} checked={!!checkRecords['d1_resort']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d1_cash" text="准备 20,000 日元现金 (暖炉/巴士不收卡)" crucial={true} checked={!!checkRecords['d1_cash']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d1_luggage" text="早上行李必须寄存在弘前站 1 楼" crucial={true} checked={!!checkRecords['d1_luggage']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d1_dinner" text="大鳄 Wani Come 晚餐 19:00 关门，先吃再泡" crucial={true} checked={!!checkRecords['d1_dinner']?.checked} onToggle={handleToggleCheck} />
                                     </div>
                                 )}
                             </div>
@@ -269,9 +320,9 @@
                                 {activeView === 'hotel' && <HotelCard name="南田温泉 Hotel Apple Land" type="温泉饭店" tags={["苹果风吕", "津轻三味线"]} description="招牌是大浴场漂浮著无数真实红苹果。晚上 20:00 大堂有免费的津轻三味线演奏。" checkInTime="18:30" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem text="死守 09:10 去程和 12:40 回程巴士" crucial={true} />
-                                        <ChecklistItem text="回程巴士务必在「市役所前」下车" crucial={true} />
-                                        <ChecklistItem text="准备晚上自行前往饭店的交通费 (约 2000 日元)" />
+                                        <ChecklistItem storageKey="d2_bus" text="死守 09:10 去程和 12:40 回程巴士" crucial={true} checked={!!checkRecords['d2_bus']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d2_stop" text="回程巴士务必在「市役所前」下车" crucial={true} checked={!!checkRecords['d2_stop']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d2_fee" text="准备晚上自行前往饭店的交通费 (约 2000 日元)" checked={!!checkRecords['d2_fee']?.checked} onToggle={handleToggleCheck} />
                                     </div>
                                 )}
                             </div>
@@ -309,6 +360,14 @@
                                                 <Icons.Map className="w-4 h-4"/> 2026 官方雪道图（可缩放）
                                             </div>
                                         </div>
+                                        <a
+                                            href="./assetsski-map.png"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 text-xs font-semibold text-sky-700 underline"
+                                        >
+                                            打开原图（新标签，原生缩放）
+                                        </a>
 
                                         <div className="bg-sky-50 p-4 rounded-xl border border-sky-200">
                                             <h4 className="font-bold text-sky-800 flex items-center gap-2 mb-2"><Icons.Mountain className="w-4 h-4"/> 关键数据 (PDF提取)</h4>
@@ -342,9 +401,9 @@
                                 {activeView === 'hotel' && <HotelCard name="Rockwood Hotel & Spa" type="滑雪度假村" tags={["Ski-in/out", "露天溫泉", "自助餐"]} description="位于岩木山腰，出门即是雪场。露天温泉可以眺望日本海和津轻平原。" checkInTime="10:00 (先存行李)" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem text="确认出租车已预约 (09:00, 12,500日元)" crucial={true} />
-                                        <ChecklistItem text="提前准备好午餐/零食 (山上贵)" />
-                                        <ChecklistItem text="确认滑雪租赁尺寸" />
+                                        <ChecklistItem storageKey="d3_taxi" text="确认出租车已预约 (09:00, 12,500日元)" crucial={true} checked={!!checkRecords['d3_taxi']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d3_food" text="提前准备好午餐/零食 (山上贵)" checked={!!checkRecords['d3_food']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d3_rent" text="确认滑雪租赁尺寸" checked={!!checkRecords['d3_rent']?.checked} onToggle={handleToggleCheck} />
                                     </div>
                                 )}
                             </div>
@@ -381,9 +440,9 @@
                                 {activeView === 'hotel' && <HotelCard name="Hotel JAL City Aomori" type="市区饭店" tags={["A-Factory旁", "帆立贝早餐"]} description="位置极佳，距离青森站、睡魔之家、A-Factory 都在步行范围内。" checkInTime="18:10" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem text="预约 16:30 的 Jumbo Taxi 直达青森市区" crucial={true} />
-                                        <ChecklistItem text="准时退房并归还租赁装备" />
-                                        <ChecklistItem text="赶在 19:00 前到达帆立小屋 (防关门)" crucial={true} />
+                                        <ChecklistItem storageKey="d4_jumbo" text="预约 16:30 的 Jumbo Taxi 直达青森市区" crucial={true} checked={!!checkRecords['d4_jumbo']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d4_return" text="准时退房并归还租赁装备" checked={!!checkRecords['d4_return']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d4_dinner" text="赶在 19:00 前到达帆立小屋 (防关门)" crucial={true} checked={!!checkRecords['d4_dinner']?.checked} onToggle={handleToggleCheck} />
                                     </div>
                                 )}
                             </div>
@@ -408,9 +467,9 @@
                                 {activeView === 'hotel' && <HotelCard name="Hotel Mystays Nippori" type="东京据点" tags={["交通枢纽", "成田便利", "安静"]} description="位于日暮里，是往返成田机场的 Skyliner 枢纽站。周边有著名的'谷中银座'老街。" checkInTime="20:00 (到达东京后)" />}
                                 {activeView === 'check' && (
                                     <div className="space-y-3">
-                                        <ChecklistItem text="预留 45 分钟以上前往新青森站 (防JR误点)" crucial={true} />
-                                        <ChecklistItem text="新干线票买到「上野站」更方便" crucial={true} />
-                                        <ChecklistItem text="面屋武藏 22:00 关门，请尽早前往" crucial={true} />
+                                        <ChecklistItem storageKey="d5_buffer" text="预留 45 分钟以上前往新青森站 (防JR误点)" crucial={true} checked={!!checkRecords['d5_buffer']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d5_ueno" text="新干线票买到「上野站」更方便" crucial={true} checked={!!checkRecords['d5_ueno']?.checked} onToggle={handleToggleCheck} />
+                                        <ChecklistItem storageKey="d5_noodle" text="面屋武藏 22:00 关门，请尽早前往" crucial={true} checked={!!checkRecords['d5_noodle']?.checked} onToggle={handleToggleCheck} />
                                     </div>
                                 )}
                             </div>
